@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+        rust-version: [stable]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust-version }}
+          components: clippy
+
+      - name: Run Rust tests
+        run: cargo test --all --verbose
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend unit tests
+        working-directory: frontend
+        run: npm test --if-present
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps
+
+      - name: Start backend server
+        run: |
+          cargo build --release
+          nohup target/release/bff-mvp &
+          # wait for server to be ready
+          for i in {1..30}; do
+            if curl -sSf http://localhost:8080/ >/dev/null; then break; fi
+            sleep 1
+          done
+
+      - name: Run frontend e2e tests (Playwright)
+        working-directory: frontend
+        run: npm run test:e2e

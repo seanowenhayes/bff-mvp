@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "vitest.explorer",
+    "dbaeumer.vscode-eslint",
+    "rust-lang.rust-analyzer"
+  ]
+}
+

@@ -126,6 +126,20 @@ cargo build --release
 RUST_LOG=info cargo run
 ```
 
+## Tests
+
+- Rust: `cargo test`
+- Frontend unit tests (Vitest): `cd frontend && npm ci && npm test`
+- Frontend e2e tests (Playwright):
+
+```bash
+cd frontend
+npm ci
+npx playwright install
+npm run test:e2e
+```
+
+
 ## License
 
 MIT

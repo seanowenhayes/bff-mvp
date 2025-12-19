@@ -1,0 +1,5 @@
+{
+  "vitest.commandLine": "npm run test",
+  "vitest.include": ["frontend/src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
+  "vitest.workspaceConfig": "./frontend/vite.config.ts"
+}
