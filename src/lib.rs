@@ -1,9 +1,11 @@
 use axum::body::Body;
+use axum::extract::{Request, State};
 use axum::response::Response;
 use axum::routing::get_service;
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use axum::{http::StatusCode, response::IntoResponse, routing::get, Json, Router};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::sync::{Arc, RwLock};
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
@@ -41,11 +43,15 @@ pub fn build_app(state: AppState) -> Router {
             )
         });
 
+    let state_for_fallback = state.clone();
     Router::new()
         .route("/api/routes", get(get_routes).post(add_route))
         .route("/api/logs", get(get_logs))
         .nest_service("/", static_service)
-        .fallback(spa_index)
+        .fallback(move |req: Request| {
+            let state = state_for_fallback.clone();
+            async move { dynamic_route_handler(state, req).await }
+        })
         .layer(CorsLayer::permissive())
         .with_state(state)
 }
@@ -105,6 +111,43 @@ pub fn log_request(state: &AppState, method: String, path: String, status: u16) 
         let excess = logs.len() - 1000;
         logs.drain(0..excess);
     }
+}
+
+// Dynamic route handler - checks if request matches any dynamically registered route
+// This is used as a fallback handler, so it only runs if no static file matches
+async fn dynamic_route_handler(state: AppState, req: Request) -> impl IntoResponse {
+    let method_str = req.method().to_string();
+    let path_str = req.uri().path().to_string();
+
+    // Check if this request matches any dynamically registered route
+    // Clone routes to avoid holding lock across await
+    let routes = {
+        let routes_guard = state.routes.read().unwrap();
+        routes_guard.clone()
+    };
+
+    let matches = routes.iter().any(|route| {
+        route.method.to_uppercase() == method_str.to_uppercase() && route.path == path_str
+    });
+
+    if matches {
+        // Handle the dynamic route
+        log_request(&state, method_str.clone(), path_str.clone(), 200);
+        let json_response = json!({
+            "message": "Dynamic route matched",
+            "path": path_str,
+            "method": method_str
+        });
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "application/json")
+            .body(Body::from(json_response.to_string()))
+            .unwrap()
+            .into_response();
+    }
+
+    // No match, fall back to SPA index
+    spa_index().await.into_response()
 }
 
 #[cfg(test)]
